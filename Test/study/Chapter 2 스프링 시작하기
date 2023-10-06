@@ -123,4 +123,80 @@ pom.xml 파일에 의존과 플러그인의 두 가지 정보를 설정했다.
  - AppContext.java : 스프링 설정 파일
  - main. java : main() 메서드를 통해 스프링과 Greeter를 실행하는 자바 클래스
 
+```
+package chap02;
+
+public class Greeter {
+	private String format;
+
+	public String greet(String guest) {
+		return String.format(format, guest);
+	}
+
+	public void setFormat(String format) {
+		this.format = format;
+	}
+
+}
+```
+
+```
+package chap02;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppContext {
+
+	@Bean
+	public Greeter greeter() {
+		Greeter g = new Greeter();
+		g.setFormat("%s, 안녕하세요!");
+		return g;
+	}
+
+}
+```
+
+```
+package chap02;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class Main2 {
+
+	public static void main(String[] args) {
+		AnnotationConfigApplicationContext ctx = 
+				new AnnotationConfigApplicationContext(AppContext.class);
+		Greeter g = ctx.getBean("greeter", Greeter.class);
+		String msg = g.greet("스프링");
+		System.out.println(msg);
+		ctx.close();
+	}
+}
+```
+
+2.1 싱글톤 객체
+
+```
+package chap02;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class Main {
+
+	public static void main(String[] args) {
+		AnnotationConfigApplicationContext ctx = 
+				new AnnotationConfigApplicationContext(AppContext.class);
+		Greeter g1 = ctx.getBean("greeter", Greeter.class);
+		Greeter g2 = ctx.getBean("greeter", Greeter.class);
+		System.out.println("(g1 == g2) = " + (g1 == g2));
+		ctx.close();
+	}
+}
+```
+
+
+
 

@@ -1,0 +1,18 @@
+jdbcTemplate이 사용법 설명
+
+1. JDBC 프로그래밍의 단점을 보완하는 스프링
+
+- 기존의 길고 복잡했던 코드가 간결해 진다.
+- 트랜잭선 관리가 쉽다.(@Transactional 만 붙이면 됨)
+
+2. 프로젝트 준비
+
+2.1 프로젝트 생성
+
+책 본문 참고
+
+2.2 DB 테이블 생성
+
+- MYSQL 설치
+- https://hongong.hanbit.co.kr/mysql-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-%EB%B0%8F-%EC%84%A4%EC%B9%98%ED%95%98%EA%B8%B0mysql-community-8-0/
+

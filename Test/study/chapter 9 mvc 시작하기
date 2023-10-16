@@ -1,0 +1,17 @@
+웹 개발에 필요한 다양한 기능을 구현하게 도와주는 기능
+
+1. 프로젝트 생성
+
+책 본문 참고
+
+2. 이클립스 톰캣 설정
+
+책 본문 참고
+
+3. 스프링 mvc를 위한 설정
+
+  1) 스프링 mvc의 주요 설정
+    - HandlerMapping, ViewResolver 등
+    - 스프링의 DispatcherServlet
+
+3-1 스프링 mvc 설정

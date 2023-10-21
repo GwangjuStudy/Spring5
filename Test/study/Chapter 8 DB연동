@@ -1,0 +1,228 @@
+jdbcTemplate이 사용법 설명
+
+1. JDBC 프로그래밍의 단점을 보완하는 스프링
+
+- 기존의 길고 복잡했던 코드가 간결해 진다.
+- 트랜잭선 관리가 쉽다.(@Transactional 만 붙이면 됨)
+
+2. 프로젝트 준비
+
+2.1 프로젝트 생성
+
+책 본문 참고
+
+2.2 DB 테이블 생성
+
+- MYSQL 설치
+- https://hongong.hanbit.co.kr/mysql-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C-%EB%B0%8F-%EC%84%A4%EC%B9%98%ED%95%98%EA%B8%B0mysql-community-8-0/
+
+====================================================================
+
+JDBC API를 이용하면 DB 연동에 필요한 Connectiuon을 구한 다음 쿼리를 실행하기 위한 PreparedStatement를 생성한다. 그리고 쿼리를 실행한 뒤에는 finally 블록에서 ResultSet, PreparedStatement, Connection을 닫는다.
+
+이것들은 사실상 데이터 처리와는 상관없는 코드지만 JDBC 프로그래밍을 할 때 구조적으로 반복된다. 구조적인 반복을 줄이기 위해 스프링은 이 두 패턴을 엮은 JdbcTemplate 클래스를 제공한다. 이 클래스를 사용하면 코드는 다음과 같은 형태이다.
+
+```
+List<Member> results = jdbcTemplate.query(
+	"select * from MEMBER where EMAIL = ?",
+	new RowMapper<Member>() {
+			@Override
+			public Member mapRow(ResultSet rs, int rowNum) throws SQLException {
+				Member member = new Member(
+						rs.getString("EMAIL"),
+						rs.getString("PASSWORD"),
+						rs.getString("NAME"),
+						rs.getTimestamp("REGDATE").toLocalDateTime());
+					member.setId(rs.getLong("ID"));
+					return member;
+				}
+			}, email);
+	return results.isEmpty() ? null : results.get(0);
+```
+
+스프링이 제공하는 또 다른 장점은 트랜잭션 관리가 쉽다는 것이다. JDBC API로 트랜잭션을 처리하려면 다음과 같이 Connection의 setAutoCommit(false)을 이용해서 자동 커밋을 비활성화하고 commit()과 rollback() 메서드를 이용해서 트랜잭션을 커밋하거나 롤백해야 한다.
+
+스프링을 사용하면 트랜잭션을 적용하고 싶은 메서드에 @Transactional 애노테이션을 붙이기만 하면 된다. 커밋과 롤백 처리는 스프링이 알아서 처리하므로 코드를 작성하는 사람은 트랜잭션 처리를 제외한 핵심 코드만 집중해서 작성하면 된다.
+
+<datasourse 설정>
+
+DBC API는 DriverManager 외에 DataSource를 이용해서 DB 연결을 구하는 방법을 정의하고 있다. DataSource를 사용하면 다음 방식으로 Connection을 구할 수 있다.
+
+```
+Connection conn = null;
+try {
+	conn = dataSource.getConnection();
+    }
+```
+
+스프링이 제공하는 DB 연동 기능은 DataSource를 사용해서 DB Connection을 구한다. DB 연동에 사용할 DataSource를 스프링 빈으로 등록하고 DB 연동 기능을 구현한 빈 객체는 DataSource를 주입받아 사용한다.
+
+<Tomcat JDBC의 주요 프로퍼티>
+
+Tomcat JDBC 모듈의 org.apache.tomcat.jdbc.pool.DataSource 클래스는 커넥션 풀 기능을 제공하는 DataSource 구현 클래스이다. DataSource 클래스는 커넥션을 몇 개 만들지 지정할 수 있는 메서드를 제공한다. 커넥션 풀은 커넥션을 생성하고 유지한다. 커넥션 풀에 커넥션을 요청하면 해당 커넥션은 활성 상태가 되고, 커넥션을 다시 커넥션 풀에 반환하면 유휴 상태가 된다.
+즉, datasource.getConnection()을 하면 커넥션 풀에서 커넥션을 가져와 커넥션이 활성 상태가 된다.
+반대로 커넥션을 종료(close)하면 커넥션은 풀로 돌아가 유휴 상태가 된다. 커넥션을 종료하면 실제 커넥션을 끊지 않고 풀에 반환한다.
+
+```
+public class DbQuery {
+	private DataSource dataSource;
+
+	public DbQuery(DataSource dataSource) {
+		this.dataSource = dataSource;
+	}
+
+	public int count() {
+		Connection conn = null;
+		try {
+			conn = dataSource.getConnection();
+			try (Statement stmt = conn.createStatement();
+					ResultSet rs = stmt.executeQuery("select count(*) from MEMBER")) {
+				rs.next();
+				return rs.getInt(1);
+			}
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		} finally {
+			if (conn != null)
+				try {
+					conn.close();
+				} catch (SQLException e) {
+				}
+		}
+	}
+}
+```
+
+커넥션 풀을 사용하는 이유는 성능 때문이다. 매번 새로운 커넥션을 생성하면 그때마다 연결 시간이 소모된다. 커넥션 풀을 사용하면 미리 커넥션을 생성했다가 필요할 때에 커넥션을 꺼내 쓰므로 커넥션을 구하는 시간이 줄어 전체 응답 시간도 짧아진다. 그래서 커넥션 풀을 초기화할 때 최소 수준의 커넥션을 미리 생성하는 것이 좋다.
+
+커넥션 풀에 생성된 커넥션은 지속적으로 재사용된다. 하지만 한 커넥션이 영원히 유지되는 것은 아니다. DBMS 설정에 따라 일정 시간 내에 쿼리를 실행하지 않으면 연결을 끊기도 한다. 이 경우 DBMS는 해당 커넥션의 연결을 끊지만 커넥션은 여전이 풀 속에 남아 있다. 이 상태에서 해당 커넥션을 풀에서 가져와 사용하면 연결이 끊어진 커넥션이므로 익셉션이 발생하게 된다.
+
+특정 시간대에 사용자가 없으면 이런 상황이 발생할 수 있다. 이런 문제를 방지하려면 커넥션 풀의 커넥션이 유효한지 주기적으로 검사해야 한다.
+
+<JdbcTemplate를 이용한 쿼리 실행>
+
+1. JdbcTemplate 생성
+
+```
+public class MemberDao {
+
+	private JdbcTemplate jdbcTemplate;
+
+	public MemberDao(DataSource dataSource) {
+		this.jdbcTemplate = new JdbcTemplate(dataSource);
+	}
+```
+
+MemberDao 클래스에 JdbcTemplate 객체를 생성하는 코드를 추가한 것이다. JdbcTemplate 객체를 생성하려면 위의 코드처럼 DataSource를 생성자에 전달하면 된다. 세터 메서드 방식을 이용해서 주입받고 생성해도 된다.
+
+JdbcTemplate을 생성하는 코드를 MemberDao 클래스에 추가했으니 스프링 설정에 MemberDao 빈 설정을 추가한다.
+
+```
+@Configuration
+public class AppCtx {
+
+	@Bean(destroyMethod = "close")
+	public DataSource dataSource() {
+		DataSource ds = new DataSource();
+		ds.setDriverClassName("com.mysql.jdbc.Driver");
+		ds.setUrl("jdbc:mysql://localhost/spring5fs?characterEncoding=utf8");
+		ds.setUsername("spring5");
+		ds.setPassword("spring5");
+		ds.setInitialSize(2);
+		ds.setMaxActive(10);
+		ds.setTestWhileIdle(true);
+		ds.setMinEvictableIdleTimeMillis(60000 * 3);
+		ds.setTimeBetweenEvictionRunsMillis(10 * 1000);
+		return ds;
+	}
+
+	@Bean
+	public MemberDao memberDao() {
+		return new MemberDao(dataSource());
+	}
+```
+
+2. jdbcTemplate을 이용한 조회 쿼리 실행
+
+JdbcTemplate 클래스는 select 쿼리 실행을 위한 query() 메서드를 제공한다.
+
+query() 메서드는 sql 파라미터로 전달받은 쿼리를 실행하고 RowMapper를 이용해서 ResultSet의 결과를 자바 객체로 변환한다. sql 파라미터가 아래와 같이 인덱스 기반 파라미터를 가진 쿼리이면 args파라미터를 이용해서 각 인덱스 파라미터의 값을 지정한다.
+
+쿼리 실행 결과를 자바 객체로 변환할 때 사용하는 RowMapper 인터페이스는 다음과 같다.
+
+```
+public interface RowMapper<T> {
+	T mapRow(ResultSet rs, int rowNum) throws SQLException;
+}
+```
+
+RowMapper의 mapRow() 메서드는 SQL 실행 결과로 구한 ResultSet에서 한 행의 데이터를 읽어와 자바 객체로 변환하는 매퍼 기능을 구현한다. RowMapper 인터페이스를 구현한 클래스를 작성할 수도 있지만 임의 클래스나 람다식으로 RowMapper의 객체를 생성해서 query() 메서드에 전달할 때도 많다.
+
+```
+public class MemberDao {
+
+	private JdbcTemplate jdbcTemplate;
+
+	public MemberDao(DataSource dataSource) {
+		this.jdbcTemplate = new JdbcTemplate(dataSource);
+	}
+
+	public Member selectByEmail(String email) {
+		List<Member> results = jdbcTemplate.query(
+				"select * from MEMBER where EMAIL = ?",
+				new RowMapper<Member>() {
+					@Override
+					public Member mapRow(ResultSet rs, int rowNum) throws SQLException {
+						Member member = new Member(
+								rs.getString("EMAIL"),
+								rs.getString("PASSWORD"),
+								rs.getString("NAME"),
+								rs.getTimestamp("REGDATE").toLocalDateTime());
+						member.setId(rs.getLong("ID"));
+						return member;
+					}
+				}, email);
+
+		return results.isEmpty() ? null : results.get(0);
+	}  
+```
+
+결과가 1행인 경우 사용하는 query
+
+```
+public int count() {
+	Integer count = jdbcTemplate.queryForObject(
+			"select count(*) from MEMBER", Integer.class);
+	return count;
+}
+```
+
+count(*) 쿼리는 결과가 한 행일 뿐이니 쿼리 결과를 List로 받기보다 Integer와 같은 정수 타입으로 받으면 편리할 것이다. 이를 위한 메서드가 바로 queryForObject()이다.
+
+queryForObject() 메서드를 사용한 위 코드와 기존의 query() 메서드를 사용한 코드의 차이점은 리턴 타입이 List가 아니라 RowMapper로 변환해주는 타입이라는 점이다.
+
+T queryForObject(String sql, Class<T> requiredType) 등
+queryForObject() 메서드를 사용하려면 쿼리 실행 결과는 반드시 한 행이어야 한다. 만약 쿼리 실행 결과 행이 없거나 두 개 이상이면 IncorrectResultSizeDataAccessException이 발생한다. 행의 개수가 0이면 하위 클래스인 EmptyResultDataAccessException이 발생한다. 따라서 결과 행이 정확히 한 개가 아니면 queryForObject() 메서드 대신 query() 메서드를 사용해야 한다.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
